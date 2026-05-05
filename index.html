@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: sans-serif;
+            margin: 0; padding: 15px;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .container { width: 100%; max-width: 500px; }
+        canvas { background: #1e1e1e; border-radius: 15px; padding: 10px; }
+        h2 { font-size: 16px; letter-spacing: 1px; color: #888; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>ATMOSPHERIC TRACING</h2>
+        <canvas id="weatherChart"></canvas>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Расширяем на весь экран
+
+        // Получаем данные из URL (которые пришлет бот)
+        const urlParams = new URLSearchParams(window.location.search);
+        const temps = JSON.parse(urlParams.get('temps'));
+        const labels = JSON.parse(urlParams.get('labels'));
+
+        const ctx = document.getElementById('weatherChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Temp',
+                    data: temps,
+                    borderColor: '#00e5ff',
+                    borderWidth: 3,
+                    tension: 0.4, // Сглаживание
+                    pointBackgroundColor: 'white',
+                    pointRadius: 4,
+                    fill: false
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#888', maxRotation: 90, minRotation: 90 } },
+                    y: { display: false }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

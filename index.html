@@ -1,62 +1,98 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #121212;
             color: white;
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0; padding: 15px;
             display: flex; flex-direction: column; align-items: center;
+            overflow: hidden;
         }
-        .container { width: 100%; max-width: 500px; }
-        canvas { background: #1e1e1e; border-radius: 15px; padding: 10px; }
-        h2 { font-size: 16px; letter-spacing: 1px; color: #888; }
+        .card {
+            background: #1e1e1e;
+            border-radius: 20px;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+            box-sizing: border-box;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            margin-top: 20px;
+        }
+        h2 { font-size: 12px; color: #00e5ff; letter-spacing: 2px; margin-bottom: 20px; text-align: center; text-transform: uppercase; }
+        #weatherChart { width: 100% !important; min-height: 250px; }
+        #error-log { color: #ff5252; font-size: 10px; margin-top: 15px; text-align: center; font-family: monospace; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>ATMOSPHERIC TRACING</h2>
+    <div class="card">
+        <h2 id="status">Atmospheric Tracing</h2>
         <canvas id="weatherChart"></canvas>
+        <div id="error-log"></div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Расширяем на весь экран
+        tg.ready();
+        tg.expand();
 
-        // Получаем данные из URL (которые пришлет бот)
-        const urlParams = new URLSearchParams(window.location.search);
-        const temps = JSON.parse(urlParams.get('temps'));
-        const labels = JSON.parse(urlParams.get('labels'));
+        const log = (msg) => { document.getElementById('error-log').innerText = msg; };
 
-        const ctx = document.getElementById('weatherChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Temp',
-                    data: temps,
-                    borderColor: '#00e5ff',
-                    borderWidth: 3,
-                    tension: 0.4, // Сглаживание
-                    pointBackgroundColor: 'white',
-                    pointRadius: 4,
-                    fill: false
-                }]
-            },
-            options: {
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { ticks: { color: '#888', maxRotation: 90, minRotation: 90 } },
-                    y: { display: false }
-                }
+        try {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Получаем и декодируем данные
+            const tempsData = urlParams.get('temps');
+            const labelsData = urlParams.get('labels');
+
+            if (!tempsData || !labelsData) {
+                log("Ожидание данных из системы...");
+            } else {
+                const temps = JSON.parse(decodeURIComponent(tempsData));
+                const labels = JSON.parse(decodeURIComponent(labelsData));
+
+                const ctx = document.getElementById('weatherChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: temps,
+                            borderColor: '#00e5ff',
+                            borderWidth: 4,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointBackgroundColor: '#fff',
+                            pointBorderColor: '#00e5ff',
+                            pointBorderWidth: 2,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: {
+                                ticks: { color: '#888', font: { size: 9 }, maxRotation: 90, minRotation: 90 },
+                                grid: { display: false }
+                            },
+                            y: {
+                                ticks: { color: '#888', font: { size: 10 } },
+                                grid: { color: 'rgba(255,255,255,0.05)' }
+                            }
+                        }
+                    }
+                });
             }
-        });
+        } catch (e) {
+            log("Ошибка инициализации: " + e.message);
+        }
     </script>
 </body>
 </html>

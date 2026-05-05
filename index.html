@@ -6,93 +6,145 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
+        :root { --bg: #1a1a1a; --card: #252525; --accent: #ffdb4d; --text: #ffffff; }
         body {
-            background-color: #121212;
-            color: white;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0; padding: 15px;
+            background: linear-gradient(180deg, #4a90e2 0%, #1a1a1a 100%);
+            background-attachment: fixed;
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 0;
             display: flex; flex-direction: column; align-items: center;
-            overflow: hidden;
         }
-        .card {
-            background: #1e1e1e;
-            border-radius: 20px;
-            padding: 20px;
-            width: 100%;
-            max-width: 400px;
-            box-sizing: border-box;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            margin-top: 20px;
+        .header {
+            width: 100%; padding: 20px; box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center;
         }
-        h2 { font-size: 12px; color: #00e5ff; letter-spacing: 2px; margin-bottom: 20px; text-align: center; text-transform: uppercase; }
-        #weatherChart { width: 100% !important; min-height: 250px; }
-        #error-log { color: #ff5252; font-size: 10px; margin-top: 15px; text-align: center; font-family: monospace; }
+        .search-box {
+            width: 90%; background: rgba(255,255,255,0.2);
+            border: none; border-radius: 12px; padding: 12px 15px;
+            color: white; font-size: 16px; outline: none;
+            backdrop-filter: blur(10px); margin-bottom: 20px;
+        }
+        .search-box::placeholder { color: rgba(255,255,255,0.7); }
+        
+        .current-weather { text-align: center; margin-bottom: 30px; }
+        .city-name { font-size: 28px; font-weight: 500; margin-bottom: 5px; }
+        .temp-main { font-size: 84px; font-weight: 200; margin: 10px 0; }
+        .condition { font-size: 20px; text-transform: capitalize; opacity: 0.9; }
+
+        .details-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 10px; width: 90%; margin-bottom: 20px;
+        }
+        .detail-card {
+            background: rgba(0,0,0,0.3); border-radius: 15px;
+            padding: 15px; backdrop-filter: blur(5px);
+        }
+        .detail-label { font-size: 12px; opacity: 0.6; margin-bottom: 5px; }
+        .detail-value { font-size: 18px; font-weight: 500; }
+
+        .forecast-card {
+            width: 90%; background: rgba(0,0,0,0.3);
+            border-radius: 20px; padding: 15px; box-sizing: border-box;
+            margin-bottom: 30px;
+        }
+        canvas { width: 100% !important; height: 150px !important; }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h2 id="status">Atmospheric Tracing</h2>
-        <canvas id="weatherChart"></canvas>
-        <div id="error-log"></div>
+    <div class="header">
+        <input type="text" class="search-box" id="cityInput" placeholder="🔍 Поиск города..." onkeypress="handleSearch(event)">
+        
+        <div class="current-weather">
+            <div class="city-name" id="city">Загрузка...</div>
+            <div class="temp-main" id="temp">--°</div>
+            <div class="condition" id="cond">Ожидание данных</div>
+        </div>
+
+        <div class="details-grid">
+            <div class="detail-card">
+                <div class="detail-label">Ощущается как</div>
+                <div class="detail-value" id="feels">--°</div>
+            </div>
+            <div class="detail-card">
+                <div class="detail-label">Влажность</div>
+                <div class="detail-value" id="hum">--%</div>
+            </div>
+        </div>
+
+        <div class="forecast-card">
+            <div style="font-size: 14px; margin-bottom: 15px; opacity: 0.8;">Прогноз на 24 часа</div>
+            <canvas id="hourlyChart"></canvas>
+        </div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.ready();
         tg.expand();
 
-        const log = (msg) => { document.getElementById('error-log').innerText = msg; };
+        let chart;
 
-        try {
-            const urlParams = new URLSearchParams(window.location.search);
-            
-            // Получаем и декодируем данные
-            const tempsData = urlParams.get('temps');
-            const labelsData = urlParams.get('labels');
+        async function fetchWeather(city) {
+            try {
+                // 1. Геокодинг
+                const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=ru`);
+                const geoData = await geoRes.json();
+                if (!geoData.results) return alert("Город не найден");
+                
+                const { latitude, longitude, name } = geoData.results[0];
+                document.getElementById('city').innerText = name;
 
-            if (!tempsData || !labelsData) {
-                log("Ожидание данных из системы...");
-            } else {
-                const temps = JSON.parse(decodeURIComponent(tempsData));
-                const labels = JSON.parse(decodeURIComponent(labelsData));
+                // 2. Погода
+                const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,weather_code&hourly=temperature_2m&timezone=auto`);
+                const data = await res.json();
 
-                const ctx = document.getElementById('weatherChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            data: temps,
-                            borderColor: '#00e5ff',
-                            borderWidth: 4,
-                            tension: 0.4,
-                            pointRadius: 4,
-                            pointBackgroundColor: '#fff',
-                            pointBorderColor: '#00e5ff',
-                            pointBorderWidth: 2,
-                            fill: false
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: {
-                            x: {
-                                ticks: { color: '#888', font: { size: 9 }, maxRotation: 90, minRotation: 90 },
-                                grid: { display: false }
-                            },
-                            y: {
-                                ticks: { color: '#888', font: { size: 10 } },
-                                grid: { color: 'rgba(255,255,255,0.05)' }
-                            }
-                        }
-                    }
-                });
-            }
-        } catch (e) {
-            log("Ошибка инициализации: " + e.message);
+                updateUI(data);
+            } catch (e) { console.error(e); }
         }
+
+        function updateUI(data) {
+            document.getElementById('temp').innerText = Math.round(data.current.temperature_2m) + '°';
+            document.getElementById('feels').innerText = Math.round(data.current.apparent_temperature) + '°';
+            document.getElementById('hum').innerText = data.current.relative_humidity_2m + '%';
+            document.getElementById('cond').innerText = "Ясно"; // Можно расширить маппинг кодов погоды
+
+            const temps = data.hourly.temperature_2m.slice(0, 24);
+            const labels = data.hourly.time.slice(0, 24).map(t => t.split('T')[1]);
+
+            if (chart) chart.destroy();
+            const ctx = document.getElementById('hourlyChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: temps,
+                        borderColor: '#ffdb4d',
+                        borderWidth: 3,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        fill: false
+                    }]
+                },
+                options: {
+                    plugins: { legend: { display: false } },
+                    scales: { 
+                        x: { display: true, ticks: { color: '#fff', maxTicksLimit: 6 }, grid: { display: false } },
+                        y: { display: false }
+                    }
+                }
+            });
+        }
+
+        function handleSearch(e) {
+            if (e.key === 'Enter') {
+                fetchWeather(e.target.value);
+                e.target.blur();
+            }
+        }
+
+        // Инициализация (по умолчанию Engels или по геолокации)
+        fetchWeather("Энгельс");
     </script>
 </body>
 </html>
